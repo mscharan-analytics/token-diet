@@ -49,9 +49,13 @@ cd token-diet
 pip install -e .
 ```
 
-To run with SDK helpers:
+To install with SDK wrappers or local proxy features:
 ```bash
-pip install -e ".[anthropic]"
+# For Anthropic/OpenAI SDK wrappers
+pip install -e ".[anthropic,openai]"
+
+# For local HTTP proxy features
+pip install -e ".[proxy]"
 ```
 
 ---
@@ -149,6 +153,50 @@ response = client.chat.completions.create(
     ]
 )
 print(response.choices[0].message.content)
+```
+
+---
+
+## Running the Local HTTP Proxy (For Claude Code, Copilot, Cursor, etc.)
+
+For CLI-based agents like **Claude Code**, **GitHub Copilot CLI**, or **Cursor**, you can run `token-diet` as a local background HTTP proxy. The proxy acts as a middleman between the CLI tool and the upstream LLM API.
+
+### 1. Start the Proxy Server
+Once installed with proxy extras, start the server using the shell command:
+```bash
+token-diet proxy --port 8787
+```
+
+### 2. Configure Your Agent Client
+
+#### A. Claude Code
+Point Claude Code to the proxy by setting the `ANTHROPIC_BASE_URL` environment variable:
+```bash
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8787/v1"
+claude
+```
+
+#### B. GitHub Copilot CLI & OpenAI Clients
+Point your client to the local proxy endpoint by modifying the base URL settings:
+```bash
+export OPENAI_BASE_URL="http://127.0.0.1:8787/v1"
+```
+
+---
+
+## Production Readiness: Built-in Failsafes
+
+Token Diet is designed to be fully resilient for production workflows:
+1. **Fail-Open Wrap**: If any database, syntax parsing, or connection error happens during the compression or retrieval pipeline, the client wrappers automatically log a warning and fallback to sending the original uncompressed message payload. Your application **never** crashes.
+2. **In-Memory Caching Fallback**: If writing context database logs to disk fails (due to write permissions in read-only lambda/server environments), the SQLite cache automatically falls back to a fast, in-memory Python dictionary cache.
+
+---
+
+## Development & Testing
+To run the full unit testing suite:
+```bash
+pip install -e ".[dev]"
+pytest
 ```
 
 ---

@@ -8,7 +8,7 @@ version = "0.1.0"
 authors = [
     { name = "mscharan-analytics" }
 ]
-description = "A lightweight, zero-dependency context-compression (CCR) toolkit for LLM agents"
+description = "A lightweight, production-ready context-compression (CCR) toolkit for LLM agents"
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -21,6 +21,17 @@ dependencies = []
 [project.optional-dependencies]
 anthropic = ["anthropic>=0.16.0"]
 openai = ["openai>=1.0.0"]
+proxy = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "httpx>=0.24.0"
+]
+dev = [
+    "pytest>=7.0.0"
+]
+
+[project.scripts]
+token-diet = "token_diet.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["token_diet*"]
