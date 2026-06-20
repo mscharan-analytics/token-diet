@@ -41,7 +41,8 @@ class SQLiteCache:
         except Exception as e:
             warnings.warn(
                 f"Failed to initialize SQLite database cache: {e}. Token Diet is falling back to an in-memory cache.",
-                RuntimeWarning, stacklevel=2,
+                RuntimeWarning,
+                stacklevel=2,
             )
             self._use_fallback = True
 

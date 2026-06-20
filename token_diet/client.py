@@ -29,10 +29,7 @@ class TokenDiet:
                 "properties": {
                     "retrieval_id": {
                         "type": "string",
-                        "description": (
-                            "The unique ID matching a compressed block placeholder "
-                            "(e.g., ctx_a1b2c3d4)."
-                        ),
+                        "description": ("The unique ID matching a compressed block placeholder (e.g., ctx_a1b2c3d4)."),
                     }
                 },
                 "required": ["retrieval_id"],
@@ -55,8 +52,7 @@ class TokenDiet:
                         "retrieval_id": {
                             "type": "string",
                             "description": (
-                                "The unique ID matching a compressed block placeholder "
-                                "(e.g., ctx_a1b2c3d4)."
+                                "The unique ID matching a compressed block placeholder (e.g., ctx_a1b2c3d4)."
                             ),
                         }
                     },
@@ -222,7 +218,8 @@ def patch_anthropic_client(client: Any, threshold: int = 1000, diet: TokenDiet |
             warnings.warn(
                 f"Token Diet encountered an error in wrapped Anthropic client execution: {e}. "
                 "Falling back to original uncompressed request.",
-                RuntimeWarning, stacklevel=2,
+                RuntimeWarning,
+                stacklevel=2,
             )
             return original_create(*args, **kwargs)
 
@@ -316,7 +313,8 @@ def patch_openai_client(client: Any, threshold: int = 1000, diet: TokenDiet | No
             warnings.warn(
                 f"Token Diet encountered an error in wrapped OpenAI client execution: {e}. "
                 "Falling back to original uncompressed request.",
-                RuntimeWarning, stacklevel=2,
+                RuntimeWarning,
+                stacklevel=2,
             )
             return original_create(*args, **kwargs)
 

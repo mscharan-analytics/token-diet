@@ -107,8 +107,7 @@ def run_live_anthropic():
         {
             "role": "user",
             "content": (
-                "Please examine this system boot log and tell me "
-                f"what the final error code is:\n\n{compressed_log}"
+                f"Please examine this system boot log and tell me what the final error code is:\n\n{compressed_log}"
             ),
         }
     ]
