@@ -1,0 +1,113 @@
+# Token Diet 🥗
+
+A lightweight, zero-dependency, and extremely easy-to-understand **Context-Compression and Retrieval (CCR)** toolkit for AI agents. 
+
+Reduce prompt sizes by **60% to 90%** on verbose content (like massive tool logs, file listings, and git diffs) while preserving the LLM's ability to recall the original context on demand.
+
+---
+
+## How It Works (The 3-Step Diet)
+
+1. **Compress**: When you pass long text to `token_diet`, it generates a short placeholder preview containing a unique `retrieval_id` (e.g. `ctx_a1b2c3d4`).
+2. **Cache**: The full, original text is stored in a local SQLite file (`~/.config/token_diet/cache.db`).
+3. **Retrieve**: If the LLM gets confused or needs the exact original content, it invokes a standard tool `retrieve_context(retrieval_id)`. `token_diet` fetches the original text from the local SQLite cache and feeds it back to the LLM.
+
+```
+[Agent Tool Output (50,000 tokens)]
+             │
+             ▼
+     ┌──────────────┐
+     │  Token Diet  │ ──► [Store full text in local SQLite cache]
+     └──────┬───────┘
+            │
+            ▼
+[Compressed Prompt (1,500 tokens)]
+            │
+            ▼
+    ┌──────────────┐
+    │  Claude/LLM  │ ──► "Wait, I need the exact details of error ctx_a1b2c3d4."
+    └──────┬───────┘
+            │  (Calls tool: retrieve_context("ctx_a1b2c3d4"))
+            ▼
+    ┌──────────────┐
+    │  Token Diet  │ ──► [Reads from cache and returns original text]
+    └──────────────┘
+```
+
+---
+
+## Installation
+
+### 1. Replicate Files directly
+Since `token-diet` is designed to be fully transparent, you can simply copy the files in the `token_diet/` folder directly into your own codebase.
+
+### 2. Local Pip Install
+Or, you can install it in edit/development mode:
+```bash
+git clone https://github.com/mscharan-analytics/token-diet.git
+cd token-diet
+pip install -e .
+```
+
+To run with SDK helpers:
+```bash
+pip install -e ".[anthropic]"
+```
+
+---
+
+## Core Usage Example
+
+```python
+import anthropic
+from token_diet import TokenDiet
+
+# Initialize
+diet = TokenDiet()
+
+# 1. Compress a massive string (e.g. build logs or code file)
+huge_text = "..." # Imagine a 10,000 line log file
+compressed = diet.compress(huge_text, threshold=200)
+
+print(compressed)
+# Output:
+# [SYSTEM NOTE: The following content was compressed to save tokens.]
+# [RETRIEVAL ID: ctx_a1b2c3d4]
+# --- PREVIEW ---
+# [First few lines of original text...]
+# ...
+# [To read the complete text, call 'retrieve_context' tool with id='ctx_a1b2c3d4']
+
+# 2. Add it to messages and define the retrieval tool
+messages = [{"role": "user", "content": f"Find the issue in this log:\n{compressed}"}]
+client = anthropic.Anthropic()
+
+response = client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=1024,
+    messages=messages,
+    tools=[diet.tool_definition] # Register the retrieval tool
+)
+
+# 3. Handle retrieval request automatically if Claude calls the tool
+if response.stop_reason == "tool_use":
+    tool_use = next(block for block in response.content if block.type == "tool_use")
+    if tool_use.name == "retrieve_context":
+        # Resolve request
+        result = diet.handle_tool_call(tool_use.input)
+        print("Retrieved original text from cache!")
+```
+
+---
+
+## Customizing Compression Rules
+
+You can write your own compressors in `token_diet/compressors.py`. By default, the library includes:
+- **Code Compressor**: Strips single-line and multi-line comments and minimizes spacing.
+- **JSON Crusher**: Drops redundant dict keys or array indexes and keeps structural schemas.
+- **Text Compressor**: Truncates prose/text blocks and inserts the retrieval placeholder.
+
+---
+
+## License
+MIT License. Feel free to copy, modify, and use in your own projects!
