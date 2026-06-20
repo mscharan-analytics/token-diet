@@ -1,5 +1,7 @@
 # Token Diet 🥗
 
+[![CI](https://github.com/mscharan-analytics/token-diet/actions/workflows/ci.yml/badge.svg)](https://github.com/mscharan-analytics/token-diet/actions/workflows/ci.yml)
+
 A lightweight, zero-dependency, and extremely easy-to-understand **Context-Compression and Retrieval (CCR)** toolkit for AI agents. 
 
 Reduce prompt sizes by **60% to 90%** on verbose content (like massive tool logs, file listings, and git diffs) while preserving the LLM's ability to recall the original context on demand.
