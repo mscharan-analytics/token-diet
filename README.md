@@ -100,6 +100,59 @@ if response.stop_reason == "tool_use":
 
 ---
 
+## Automatic SDK Client Wrappers (Easiest way)
+
+Instead of manually compressing and handling the retrieval tool call loops yourself, you can wrap your existing **Anthropic** or **OpenAI** client instances. 
+
+The client wrappers automatically intercept your requests, compress long strings, register the retrieval tools, and handle retrieval tool-calls under-the-hood invisibly.
+
+### 1. Anthropic (Claude) Client Wrapper
+
+```python
+import anthropic
+from token_diet import patch_anthropic_client
+
+# Initialize client as usual
+client = anthropic.Anthropic()
+
+# Patch the client instance (default compression threshold is 1000 characters)
+client = patch_anthropic_client(client, threshold=1000)
+
+# Call messages.create exactly like you used to do.
+# Large inputs will be cached & retrieved automatically behind the scenes!
+response = client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=1000,
+    messages=[
+        {"role": "user", "content": f"Analyze this large codebase file:\n{huge_file_content}"}
+    ]
+)
+print(response.content[0].text)
+```
+
+### 2. OpenAI Client Wrapper
+
+```python
+import openai
+from token_diet import patch_openai_client
+
+client = openai.OpenAI()
+
+# Patch the client
+client = patch_openai_client(client, threshold=1000)
+
+# Use OpenAI API as normal
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {"role": "user", "content": f"Parse this database dump:\n{huge_db_dump}"}
+    ]
+)
+print(response.choices[0].message.content)
+```
+
+---
+
 ## Customizing Compression Rules
 
 You can write your own compressors in `token_diet/compressors.py`. By default, the library includes:

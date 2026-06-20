@@ -33,6 +33,29 @@ class TokenDiet:
             }
         }
 
+    @property
+    def openai_tool_definition(self) -> Dict[str, Any]:
+        """
+        The tool definition block to supply to OpenAI's GPT SDK.
+        """
+        return {
+            "type": "function",
+            "function": {
+                "name": "retrieve_context",
+                "description": "Retrieves the full original uncompressed content for a given retrieval ID.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "retrieval_id": {
+                            "type": "string",
+                            "description": "The unique ID matching a compressed block placeholder (e.g., ctx_a1b2c3d4)."
+                        }
+                    },
+                    "required": ["retrieval_id"]
+                }
+            }
+        }
+
     def compress(self, text: str, threshold: int = 1000, file_extension: Optional[str] = None) -> str:
         """
         Compresses the text if it is longer than the threshold, stores it in SQLite,
@@ -104,3 +127,155 @@ class TokenDiet:
         ]
         first_lines = "\n".join(text.splitlines()[:5])
         return any(kw in first_lines for kw in keywords)
+
+
+# ==========================================
+# SDK WRAPPER HELPERS
+# ==========================================
+
+def patch_anthropic_client(client: Any, threshold: int = 1000, diet: Optional[TokenDiet] = None) -> Any:
+    """
+    Patches an Anthropic client instance so that all client.messages.create() calls
+    automatically run through the Token Diet compression and retrieval loop.
+    """
+    if diet is None:
+        diet = TokenDiet()
+
+    original_create = client.messages.create
+
+    def wrapped_create(*args: Any, **kwargs: Any) -> Any:
+        messages = kwargs.get("messages")
+        if not messages:
+            return original_create(*args, **kwargs)
+
+        # Mutating a copy of messages so the developer's original list is untouched
+        messages_copy = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, str):
+                compressed_content = diet.compress(content, threshold=threshold)
+                messages_copy.append({**msg, "content": compressed_content})
+            else:
+                messages_copy.append(msg)
+
+        kwargs["messages"] = messages_copy
+
+        # Inject retrieval tool definition
+        tools = kwargs.get("tools", [])
+        if not any(t.get("name") == "retrieve_context" for t in tools):
+            tools_list = list(tools)
+            tools_list.append(diet.tool_definition)
+            kwargs["tools"] = tools_list
+
+        response = original_create(*args, **kwargs)
+
+        # Intercept tool calls automatically in a loop
+        while response.stop_reason == "tool_use":
+            tool_use = next((block for block in response.content if block.type == "tool_use"), None)
+            if not tool_use or tool_use.name != "retrieve_context":
+                break
+
+            # Resolve retrieval ID
+            retrieved_text = diet.handle_tool_call(tool_use.input)
+
+            # Append assistant message and tool response back to history
+            messages_copy.append({"role": "assistant", "content": response.content})
+            messages_copy.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": retrieved_text
+                    }
+                ]
+            })
+
+            # Call again
+            response = original_create(*args, **kwargs)
+
+        return response
+
+    client.messages.create = wrapped_create
+    return client
+
+
+def patch_openai_client(client: Any, threshold: int = 1000, diet: Optional[TokenDiet] = None) -> Any:
+    """
+    Patches an OpenAI client instance so that all client.chat.completions.create() calls
+    automatically run through the Token Diet compression and retrieval loop.
+    """
+    if diet is None:
+        diet = TokenDiet()
+
+    original_create = client.chat.completions.create
+
+    def wrapped_create(*args: Any, **kwargs: Any) -> Any:
+        messages = kwargs.get("messages")
+        if not messages:
+            return original_create(*args, **kwargs)
+
+        # Mutating a copy of messages
+        messages_copy = []
+        for msg in messages:
+            content = msg.get("content")
+            if isinstance(content, str):
+                compressed_content = diet.compress(content, threshold=threshold)
+                messages_copy.append({**msg, "content": compressed_content})
+            else:
+                messages_copy.append(msg)
+
+        kwargs["messages"] = messages_copy
+
+        # Inject tool definition
+        tools = kwargs.get("tools", [])
+        if not any(t.get("function", {}).get("name") == "retrieve_context" for t in tools):
+            tools_list = list(tools)
+            tools_list.append(diet.openai_tool_definition)
+            kwargs["tools"] = tools_list
+
+        response = original_create(*args, **kwargs)
+
+        # Loop to automatically resolve tool calls
+        while True:
+            choice = response.choices[0]
+            message = choice.message
+            tool_calls = getattr(message, "tool_calls", None)
+            if not tool_calls:
+                break
+
+            # Find the retrieve_context tool call
+            target_call = next((tc for tc in tool_calls if tc.function.name == "retrieve_context"), None)
+            if not target_call:
+                break
+
+            # Parse arguments
+            try:
+                args_dict = json.loads(target_call.function.arguments)
+            except (ValueError, TypeError):
+                break
+
+            # Fetch uncompressed text
+            retrieved_text = diet.handle_tool_call(args_dict)
+
+            # Append history: Assistant's response
+            # Note: We must convert choice.message to dict or append as-is depending on the client compatibility
+            # In standard openai v1, appending the message object directly is accepted, but let's be safe
+            # and append it correctly.
+            messages_copy.append(message)
+            
+            # Append history: Tool resolution result
+            messages_copy.append({
+                "role": "tool",
+                "tool_call_id": target_call.id,
+                "name": "retrieve_context",
+                "content": retrieved_text
+            })
+
+            # Call API again
+            response = original_create(*args, **kwargs)
+
+        return response
+
+    client.chat.completions.create = wrapped_create
+    return client
